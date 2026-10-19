@@ -1,0 +1,1 @@
+.price-filter{display:grid;gap:8px;margin-top:18px}.price-filter output{font-weight:800;color:var(--ink)}.price-filter input[type="range"]{width:100%;accent-color:#65a30d;padding:0;border:0}.filter-range{display:flex;justify-content:space-between;color:var(--slate);font-size:11px}
