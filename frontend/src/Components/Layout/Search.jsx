@@ -1,2 +1,2 @@
-const Search = () => null
-export default Search
+const Search = () => null;
+export default Search;

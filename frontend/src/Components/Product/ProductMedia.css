@@ -1,1 +1,66 @@
-.product-media{height:190px;margin:-18px -18px 16px;display:flex;align-items:center;justify-content:center;background:#eef2f5;border-bottom:1px solid var(--line);overflow:hidden;color:#94a3b8;font-size:11px;font-weight:800;letter-spacing:.12em}.product-media img{width:100%;height:100%;object-fit:cover}.product-detail-media{display:grid;gap:12px;margin:0 auto 28px;max-width:780px}.product-detail-image,.product-detail-placeholder{width:100%;height:min(48vw,430px);object-fit:contain;background:#f1f5f9;border:1px solid var(--line);border-radius:8px}.product-detail-placeholder{display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px;font-weight:800;letter-spacing:.12em}.product-thumbnails{display:flex;gap:10px;overflow-x:auto}.product-thumbnails button{width:76px;height:60px;padding:0;border:2px solid transparent;background:#f1f5f9;border-radius:5px;overflow:hidden;cursor:pointer}.product-thumbnails button.selected{border-color:var(--ink)}.product-thumbnails img{width:100%;height:100%;object-fit:cover}
+.product-media {
+  height: 190px;
+  margin: -18px -18px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2f5;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.product-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.product-detail-media {
+  display: grid;
+  gap: 12px;
+  margin: 0 auto 28px;
+  max-width: 780px;
+}
+.product-detail-image,
+.product-detail-placeholder {
+  width: 100%;
+  height: min(48vw, 430px);
+  object-fit: contain;
+  background: #f1f5f9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.product-detail-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.product-thumbnails {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+}
+.product-thumbnails button {
+  width: 76px;
+  height: 60px;
+  padding: 0;
+  border: 2px solid transparent;
+  background: #f1f5f9;
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.product-thumbnails button.selected {
+  border-color: var(--ink);
+}
+.product-thumbnails img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

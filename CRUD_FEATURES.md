@@ -1,434 +1,676 @@
-# Product/Service CRUD Feature Status
+# ITCP318 CRUD and Feature Documentary
 
-## Summary
+## Project context
 
-| Requirement | Status | Notes |
+This document explains the feature requirements implemented in the UPS Battery
+Store. It is intentionally focused on code navigation: where a feature starts,
+which component handles it, which request is sent, which backend route and
+controller receive it, how the model is changed, and how the response returns
+to the UI.
+
+The application has a **Product** domain. It does not have a separate Service
+model or Service CRUD domain.
+
+The master documentation for the complete application is
+[`CODE_DOCUMENTARY.md`](./CODE_DOCUMENTARY.md). This file is the focused
+documentary for the CRUD, filtering, reviews, transactions, validation, UI,
+analytics, pagination, authentication, and Redux feature paths.
+
+## How to read a feature path
+
+Most feature flows follow this pattern:
+
+```text
+React page/component
+  -> local state or Redux action
+  -> Axios request
+  -> Express route
+  -> authentication/upload middleware
+  -> controller
+  -> Mongoose model and MongoDB
+  -> JSON response
+  -> component state or Redux reducer
+  -> updated UI
+```
+
+Authentication is handled with Firebase. The frontend obtains a Firebase ID
+token and sends it as a bearer token. The backend verifies the token in
+`backend/middlewares/auth.js`, then loads the application user from MongoDB.
+Admin routes additionally use `authorizeRoles("admin")`.
+
+---
+
+# 1. Product CRUD data table
+
+## What the feature does
+
+An administrator can view products in a table, create a product, edit a
+product, delete one product, and delete selected products in bulk.
+
+## Files and responsibilities
+
+| Layer | File | Responsibility |
 |---|---|---|
-| Product CRUD datatable | Implemented | Admin product list uses a searchable and sortable HTML table with create, edit, and delete actions. |
-| Multiple product photo upload | Implemented | Create and update forms accept up to 10 JPEG, PNG, or WebP files per request. Images are stored in Cloudinary. |
-| Bulk delete with checkboxes | Implemented | Admins can select individual products or all visible filtered products, then delete them in one request. |
-| Product price filter | Implemented | The storefront has a maximum-price slider backed by the public products API. |
-| Product category filter | Implemented | The storefront provides category buttons and filters products through the public products API. |
-| Product ratings filter | Implemented | The storefront filters products by minimum rating: 4+ or 4.5+ stars. |
-| Review filter | Not implemented | Reviews can be listed and deleted in the admin area, but there is no review search, product filter, rating filter, or filter query endpoint. |
-| User review/rating update | Implemented with UI limitation | The backend updates the authenticated user's existing review; the order screen does not show an edit button after submission in the same session. |
-| Admin can delete a review | Implemented with validation gap | Admins can delete a review from the Reviews tab; the backend recalculates the product rating after deletion, but an unknown review ID is not explicitly rejected. |
-| Filter/mask bad words from reviews | Implemented with custom filter | Review names and comments are masked before storage and when returned; the `bad-words` package is not installed or used. |
-| Form validation: Product CRUD, User Login, Update Profile | Implemented with Yup | All three flows call shared Yup schemas through `validate`; Formik and React Hook Form are not used in the actual code. |
-| Completed transaction | Partially implemented | Cart, shipping, confirmation, COD order creation, stock update, order persistence, and success page exist; online payment is not implemented. |
-| Sales charts with date range filter | Implemented with chart-scope limitation | Monthly sales has a start/end date filter and line chart; product and customer sales use bar charts but do not expose date inputs in their frontend components. |
-| Product pagination on homepage | Implemented | The products API returns 12 products per page and the homepage sends the current page number. |
-| Infinite scroll on homepage product list | Implemented | The homepage requests the next page near the bottom of the window and appends the returned products. |
-| Gmail/Google login using Firebase | Implemented | Login uses Firebase `GoogleAuthProvider`, popup authentication, ID-token synchronization, and the existing user session flow. |
-| Facebook login using Firebase | Not implemented | No `FacebookAuthProvider`, Facebook login handler, or `react-facebook-login`/similar package was found. |
-| Transaction email with PDF receipt | Implemented | Customer emails include the product list, line totals, subtotal, and grand total, with a PDF receipt attached. |
-| Service CRUD datatable | Not implemented | There is no Service model, controller, route, admin screen, or service-specific API in the current system. |
+| Admin entry | `frontend/src/Components/Admin/Dashboard.jsx` | Shows the dashboard tabs and renders `ProductsList` for Products. |
+| Product table | `frontend/src/Components/Admin/ProductsList.jsx` | Loads products, renders rows, tracks selection, and starts delete/edit actions. |
+| Create form | `frontend/src/Components/Admin/NewProduct.jsx` | Collects product fields and image files, validates, and submits `FormData`. |
+| Update form | `frontend/src/Components/Admin/UpdateProduct.jsx` | Loads/edit fields and submits changes plus optional new images. |
+| HTTP routes | `backend/routes/product.js` | Maps admin product URLs to controller functions. |
+| Controller | `backend/controllers/product.js` | Performs validation, uploads, database writes, and response creation. |
+| Model | `backend/models/product.js` | Defines product fields, category values, stock, price, images, and reviews. |
 
-## Product locations
+## Read/list flow
 
-### Gmail/Google and Facebook login
+```text
+Dashboard -> ProductsList
+  -> loadProducts()
+  -> GET /api/v1/admin/products
+  -> isAuthenticatedUser
+  -> authorizeRoles("admin")
+  -> getAdminProducts()
+  -> Product.find()
+  -> { products }
+  -> ProductsList.setProducts()
+  -> HTML product table
+```
 
-- `frontend/src/Components/User/Login.jsx`
-  - Imports Firebase `GoogleAuthProvider` and `signInWithPopup`.
-  - `googleLogin()` opens the Firebase Google sign-in popup.
-  - `finishLogin()` obtains the Firebase ID token, calls `POST /api/v1/users/sync`, stores the authenticated user, and redirects by role.
-  - The visible button is `Continue with Google`.
-- `frontend/src/firebase.js`
-  - Initializes the Firebase app from `VITE_FIREBASE_*` environment values.
-  - Exports the Firebase `auth` instance used by the login component.
-- `backend/routes/auth.js`
-  - Registers `POST /api/v1/users/sync`.
-- `backend/middlewares/auth.js`
-  - Verifies the Firebase ID token with Firebase Admin before user synchronization and protected API access.
-- `backend/controllers/auth.js`
-  - `syncUser` synchronizes Firebase identity/profile data into the MongoDB User model.
-- `backend/models/user.js`
-  - Stores the Firebase UID, email, name, role, and avatar.
-- `frontend/package.json`
-  - Includes the `firebase` package.
+`ProductsList` keeps the returned products in component state. Search and
+sorting in the table are client-side operations over that loaded list. The
+table is a native HTML table styled by `frontend/src/Components/Admin/Admin.css`;
+it is not a MUI Data Grid.
 
-Google/Gmail login flow:
+## Create flow
+
+```text
+NewProduct form
+  -> React form state
+  -> validate(productSchema, form values)
+  -> FormData.append(field, value)
+  -> FormData.append("images", each selected file)
+  -> POST /api/v1/admin/product/new
+  -> upload.array("images", 10)
+  -> newProduct()
+  -> uploadBuffer() for every file
+  -> Product.create()
+  -> MongoDB products collection
+  -> response
+  -> ProductsList refreshes
+```
+
+The server is the final authority for the stored product. The product schema
+also validates field types and allowed values. Images are stored as Cloudinary
+objects containing `public_id` and `url`, not as binary data in MongoDB.
+
+## Update flow
+
+```text
+ProductsList edit action
+  -> UpdateProduct receives product ID
+  -> GET product data / existing product state
+  -> edit fields and optional new images
+  -> validate(productSchema, values)
+  -> PUT /api/v1/admin/product/:id
+  -> upload.array("images", 10)
+  -> updateProduct()
+  -> update regular fields
+  -> upload new image buffers to Cloudinary
+  -> append new image references
+  -> product.save()
+  -> updated product response
+```
+
+An existing image can be removed separately:
+
+```text
+UpdateProduct image delete
+  -> DELETE /api/v1/admin/product/:id/image/:imageId
+  -> deleteProductImage()
+  -> remove image from Product.images
+  -> deleteImage(public_id) in Cloudinary
+  -> save product
+```
+
+## Single delete flow
+
+```text
+ProductsList.removeProduct(productId)
+  -> DELETE /api/v1/admin/product/:id
+  -> admin authentication and role checks
+  -> deleteProduct()
+  -> Product.findById()
+  -> Product.findByIdAndDelete()
+  -> delete every stored Cloudinary image
+  -> success response
+  -> remove row or refresh list
+```
+
+## Model fields used by CRUD
+
+The main fields are `name`, `slug`, `brand`, `sku`, `description`, `price`,
+`salePrice`, `stock`, `category`, `specs`, and `images`. The same Product
+document also owns the embedded `reviews`, `ratings`, and `numOfReviews`
+fields described later.
+
+---
+
+# 2. Multiple product photo upload
+
+## Frontend path
+
+`NewProduct.jsx` and `UpdateProduct.jsx` use a file input with `multiple`.
+Each selected file is appended with the same `images` field name:
+
+```text
+file input
+  -> images state array
+  -> FormData.append("images", file)
+  -> multipart request
+```
+
+## Backend path
+
+```text
+backend/routes/product.js
+  -> upload.array("images", 10)
+  -> backend/utils/multer.js
+  -> memory buffers in req.files
+  -> backend/utils/cloudinary.js: uploadBuffer()
+  -> Product.images = [{ public_id, url }, ...]
+```
+
+The upload middleware accepts JPEG, PNG, and WebP files and limits each file
+to 5 MB. The route allows a maximum of 10 files per request. Cloudinary
+deletion is also called when a product or individual image is removed.
+
+---
+
+# 3. Bulk delete with checkboxes
+
+## Frontend flow
+
+`ProductsList.jsx` keeps selected product IDs in the `selected` array.
+
+```text
+row checkbox
+  -> toggle(productId)
+  -> selected state
+
+select-all checkbox
+  -> toggleAll()
+  -> IDs of currently visible/filtered rows
+
+Delete selected button
+  -> bulkDelete()
+  -> window confirmation
+  -> DELETE /api/v1/admin/products/bulk
+       body: { ids: ["product-id-1", "product-id-2"] }
+```
+
+The select-all operation applies to the currently visible filtered rows; it
+does not automatically select products that are not in the current table view.
+
+## Backend flow
+
+```text
+DELETE /api/v1/admin/products/bulk
+  -> isAuthenticatedUser
+  -> authorizeRoles("admin")
+  -> bulkDeleteProducts()
+  -> Product.find({ _id: { $in: ids } })
+  -> Product.deleteMany({ _id: { $in: ids } })
+  -> delete stored Cloudinary images
+  -> return success
+```
+
+After success, the frontend removes the deleted rows from local state and
+clears the selection.
+
+---
+
+# 4. Homepage product filters
+
+All homepage filters start in
+`frontend/src/Components/Home.jsx`. The selected state is included in
+`URLSearchParams`, and the effect calls `getProducts()` whenever a filter
+changes.
+
+```text
+filter control
+  -> set filter state
+  -> Home useEffect
+  -> getProducts()
+  -> fetchProducts() in frontend/src/actions/productActions.jsx
+  -> GET /api/v1/products?filter=value
+  -> getProducts() controller
+  -> APIFeatures.search().filter().pagination()
+  -> Product.find(query)
+  -> productReducers.jsx
+  -> product cards
+```
+
+## Price filter
+
+The maximum-price range input uses `maxPrice` from PHP 0 to PHP 160,000 in
+PHP 500 steps and sends `price[lte]`.
+
+```text
+setMaxPrice()
+  -> ?price[lte]=160000
+  -> apiFeatures.js parses lte
+  -> { price: { $lte: 160000 } }
+  -> Product.find()
+```
+
+This filters the stored base `price`. The product card may display
+`salePrice || price`, so the filter does not independently calculate a
+sale-price threshold.
+
+## Category filter
+
+`Home.jsx` defines the category buttons and sends the selected value as
+`category`.
+
+```text
+category button
+  -> setCategory(categoryName)
+  -> ?category=Replacement%20Batteries
+  -> APIFeatures.filter()
+  -> exact Product.category match
+```
+
+The accepted category values are defined in the Product schema.
+
+## Ratings filter
+
+The UI offers `Any rating`, `4+ stars`, and `4.5+ stars`.
+
+```text
+setRating("4")
+  -> ?rating=gte:4
+  -> apiFeatures.js maps rating to ratings
+  -> { ratings: { $gte: 4 } }
+  -> product cards with matching aggregate ratings
+```
+
+`ratings` is the aggregate value calculated from the Product document's
+embedded reviews.
+
+## Review-record filter
+
+There is currently no review filter implementation. The admin review screen
+loads reviews and supports deletion, but it does not provide review search,
+product filtering, rating filtering, or a filter query endpoint. This is
+different from the product **ratings** filter above.
+
+---
+
+# 5. Reviews and ratings
+
+## Data structure
+
+There is no separate Review model. Reviews are embedded in `Product`:
+
+```text
+Product
+  -> reviews[]
+       -> user
+       -> name
+       -> rating
+       -> comment
+  -> ratings
+  -> numOfReviews
+```
+
+The controller recalculates `ratings` and `numOfReviews` whenever a review is
+created, updated, or deleted.
+
+## Customer create review/rating flow
+
+The review form is shown in `frontend/src/Components/Order/ListOrders.jsx`
+for a product in a Delivered order.
+
+```text
+delivered order item
+  -> rating and comment inputs
+  -> submitReview(productId)
+  -> PUT /api/v1/review
+       { productId, rating, comment }
+  -> isAuthenticatedUser
+  -> createOrUpdateReview()
+  -> Product.findById(productId)
+  -> Order.findOne({
+       user: req.user._id,
+       orderStatus: "Delivered",
+       "orderItems.product": productId
+     })
+  -> maskProfanity()
+  -> add embedded review
+  -> calculate average rating
+  -> product.save()
+  -> success response and toast
+```
+
+The backend eligibility check is important: the frontend display condition is
+not the security control. The server verifies both ownership of the order and
+the Delivered status.
+
+## Customer update own review/rating
+
+The same `PUT /api/v1/review` endpoint handles create and update.
+
+```text
+existing Product review
+  -> find review where review.user == req.user._id
+  -> Object.assign(existingReview, new rating/comment)
+  -> recalculate ratings and numOfReviews
+  -> product.save()
+```
+
+The backend ownership check prevents one user from updating another user's
+review. Current UI limitation: after successful submission,
+`ListOrders.jsx` hides the form for that local session. Reloading the orders
+screen permits another submission, which the backend treats as an update.
+
+## Admin delete review flow
+
+```text
+Dashboard Reviews tab
+  -> ProductReviews.jsx
+  -> DELETE /api/v1/reviews
+       { productId, id }
+  -> isAuthenticatedUser
+  -> authorizeRoles("admin")
+  -> deleteReview()
+  -> filter Product.reviews
+  -> recalculate ratings and numOfReviews
+  -> product.save()
+  -> local review row removed
+```
+
+The active delete path exists. A validation gap remains in the backend:
+an unknown embedded review ID is not explicitly rejected before saving the
+unchanged product.
+
+## Review display and filtering limitation
+
+`backend/controllers/product.js` has product/admin review retrieval paths, but
+the current product-detail UI does not fully render public reviews and
+`frontend/src/Components/Review/ListReviews.jsx` is only a placeholder.
+
+---
+
+# 6. Completed transaction and order status
+
+## Customer checkout flow
+
+```text
+Home/ProductDetails
+  -> App.addItemToCart()
+  -> Redux cart reducer
+  -> localStorage.cartItems
+  -> Cart.jsx
+  -> Shipping.jsx
+  -> ConfirmOrder.jsx
+  -> Payment.jsx
+  -> POST /api/v1/order/new
+  -> isAuthenticatedUser
+  -> newOrder()
+  -> load products from MongoDB
+  -> verify stock and use server prices
+  -> Order.create()
+  -> decrement product stock
+  -> notifyOrder()
+  -> OrderSuccess.jsx
+```
+
+The backend does not trust client totals. It loads each Product, validates
+stock, calculates line totals, tax, shipping, and grand total, then stores
+the order in MongoDB. The implemented payment method is Cash on Delivery;
+online payment processing is not present.
+
+## Admin status update
+
+```text
+Dashboard Orders tab
+  -> OrdersList.updateStatus(orderId, status)
+  -> PUT /api/v1/admin/order/:id
+       { orderStatus }
+  -> auth + admin middleware
+  -> updateOrder()
+  -> validate allowed status transition
+  -> set deliveredAt when Delivered
+  -> order.save()
+  -> notifyOrder()
+  -> updated order response
+```
+
+Allowed statuses are `Processing`, `Shipped`, `Delivered`, and `Cancelled`.
+The controller prevents invalid backward transitions after final states.
+
+## Order model
+
+`backend/models/order.js` stores shipping data, user reference, embedded
+`orderItems`, payment method, item price, tax, shipping, total price, status,
+and timestamps. Each order item keeps the product name, quantity, price, image,
+and product reference as a snapshot of the transaction.
+
+---
+
+# 7. Customer email and PDF receipt
+
+Both new-order creation and admin status updates call `notifyOrder()` in
+`backend/controllers/order.js`.
+
+```text
+newOrder() / updateOrder()
+  -> notifyOrder(order, user, subject)
+  -> create receipt buffer in utils/receiptPdf.js
+  -> build email text with products and totals
+  -> sendEmail() in utils/sendEmail.js
+  -> Nodemailer SMTP transport
+  -> customer email
+```
+
+The email includes product names, quantities, line subtotals, subtotal, and
+grand total. The PDF attachment includes order/customer details, status,
+products, line totals, subtotal, tax, shipping, grand total, and payment
+method.
+
+SMTP must be configured in the backend environment. If SMTP is not configured,
+the order/status operation can still succeed while the email attempt is
+skipped or logged.
+
+---
+
+# 8. Bad-word masking
+
+The project uses a custom filter, not the `bad-words` npm package.
+
+```text
+review name/comment
+  -> createOrUpdateReview()
+  -> maskProfanity() in backend/utils/profanityFilter.js
+  -> replace matched characters with asterisks
+  -> save masked values
+```
+
+The filter defines English and Filipino blocked terms, uses a
+Unicode-aware regular expression, and also masks returned review values in
+the review retrieval controllers.
+
+---
+
+# 9. Form validation
+
+Shared schemas are in `frontend/src/Utils/validation.js`. The `validate`
+helper runs Yup with `abortEarly: false`, so multiple field errors can be
+returned together.
+
+| Form | Component | Schema |
+|---|---|---|
+| Create product | `Admin/NewProduct.jsx` | `productSchema` |
+| Update product | `Admin/UpdateProduct.jsx` | `productSchema` |
+| User login | `User/Login.jsx` | `loginSchema` |
+| Update profile | `User/Profile.jsx` | `profileSchema` |
+
+```text
+submit
+  -> validate(schema, values)
+  -> show validation error
+  -> stop request when invalid
+  -> continue to Firebase/API only when valid
+```
+
+Yup is used directly with React state and native form events. Formik and React
+Hook Form are not used in the current implementation.
+
+---
+
+# 10. User interface implementation
+
+The active UI uses React, native HTML controls, and custom CSS:
+
+- `frontend/src/App.css`: storefront shell, navigation, cards, filters,
+  loading spinner, responsive layout.
+- `frontend/src/index.css`: global reset and base styles.
+- `frontend/src/Components/Admin/Admin.css`: dashboard, tables, panels,
+  forms, and responsive admin layout.
+- `frontend/src/Components/Admin/AdminImages.css`: product image manager.
+- `frontend/src/Components/Product/ProductMedia.css`: product imagery.
+- `frontend/src/Components/HomeFilters.css`: homepage filter controls.
+- `frontend/src/Components/User/Profile.css`: profile page styling.
+
+Recharts is used for charts and React Toastify for notifications. Bootstrap
+components and active MUI/Data Grid components are not used by the current
+screen implementations, even though related packages may be listed in the
+frontend manifest.
+
+---
+
+# 11. Sales charts
+
+The dashboard chart components call admin analytics endpoints:
+
+```text
+DashboardOverview / chart component
+  -> Axios request with Firebase token
+  -> backend/routes/order.js
+  -> aggregation controller in backend/controllers/order.js
+  -> MongoDB orders aggregation
+  -> Recharts line/bar chart
+```
+
+`MonthlySalesChart.jsx` exposes a start/end date filter and renders a line
+chart. `ProductSalesChart.jsx` and `UserSalesChart.jsx` render bar charts but
+do not expose the same date inputs in their current UI.
+
+---
+
+# 12. Pagination and infinite scroll
+
+## Pagination
+
+The backend product list uses 12 records per page:
+
+```text
+Home.page
+  -> ?page=1
+  -> APIFeatures.pagination(12)
+  -> Product.find().limit(12).skip(...)
+  -> products + resPerPage
+```
+
+`Home.jsx` stores `page` and uses `resPerPage` to determine whether another
+page may exist.
+
+## Infinite scroll
+
+```text
+window scroll
+  -> near document bottom
+  -> getProducts(page + 1, true)
+  -> fetchProducts(..., append=true)
+  -> productsAppend action
+  -> reducer appends products
+  -> product grid grows without a full page navigation
+```
+
+The request uses an `AbortController` for a new non-append filter request and
+ignores cancellation errors.
+
+---
+
+# 13. Firebase Google login
 
 ```text
 Login.jsx googleLogin()
-    -> Firebase signInWithPopup(auth, new GoogleAuthProvider())
-    -> credential.user.getIdToken()
-    -> POST /api/v1/users/sync with Bearer token
-    -> Firebase Admin verifyIdToken()
-    -> User synchronization in MongoDB
-    -> helpers.authenticate() and Redux loginSuccess()
-    -> navigate to / or /dashboard
+  -> signInWithPopup(auth, GoogleAuthProvider)
+  -> Firebase user.getIdToken()
+  -> POST /api/v1/users/sync
+  -> Firebase Admin verifyIdToken()
+  -> syncUser() in MongoDB
+  -> helpers.authenticate()
+  -> Redux loginSuccess()
+  -> navigate home or dashboard by role
 ```
 
-Facebook status: Facebook login is not implemented. No `FacebookAuthProvider`, Facebook handler, `react-facebook-login`, or similar social-login package was found in the actual project dependencies or source files.
+`frontend/src/firebase.js` reads the Firebase web configuration from
+`VITE_FIREBASE_*` environment values. Facebook login is not implemented:
+there is no `FacebookAuthProvider` or Facebook login handler.
 
-### Product pagination on homepage
+---
 
-- `frontend/src/Components/Home.jsx`
-  - Stores the current page in `page`.
-  - Sends `page: nextPage` through the product query string.
-  - Reads `resPerPage` from the API response to determine whether another page exists.
-- `frontend/src/actions/productActions.jsx`
-  - `getProducts(query, append)` sends the query to `GET /api/v1/products`.
-  - Dispatches either `productsSuccess` for a fresh page or `productsAppend` for a later page.
-- `frontend/src/reducers/productReducers.jsx`
-  - Handles `PRODUCTS_REQUEST`, `PRODUCTS_SUCCESS`, and `PRODUCTS_APPEND`.
-  - Appends later products to the existing product array for `PRODUCTS_APPEND`.
-- `backend/controllers/product.js`
-  - `getProducts` applies `pagination(resPerPage)` with `resPerPage = 12`.
-  - Returns `products`, `productsCount`, `resPerPage`, and `filteredProductsCount`.
-- `backend/utils/apiFeatures.js`
-  - `pagination(resPerPage)` converts the requested page into Mongoose `limit` and `skip` values.
+# 14. Redux state management
 
-Pagination flow:
+The store is configured in `frontend/src/store.js` with reducers and thunk.
+
+| State area | Reducer | Main use |
+|---|---|---|
+| Products | `productReducers.jsx` | Product list, append, selected product, loading, errors. |
+| Cart | `cartReducers.jsx` | Cart items and shipping information. |
+| Orders | `orderReducers.jsx` | Order creation/loading/success/errors. |
+| User | `userReducers.jsx` | Login, logout, authenticated user, loading/errors. |
+
+Async work is dispatched through action modules such as
+`productActions.jsx`, `orderActions.jsx`, and `userActions.jsx`. Components
+subscribe with `useSelector` and dispatch with `useDispatch`.
+
+---
+
+# 15. Service CRUD status
+
+The requirement wording mentions Product/Service CRUD, but this repository
+contains only Product CRUD:
 
 ```text
-Home page state
-    -> page query parameter
-    -> GET /api/v1/products?page=N
-    -> productController.getProducts()
-    -> APIFeatures.pagination(12)
-    -> MongoDB Product.find().limit(12).skip(...)
-    -> products + resPerPage response
-    -> productReducers product list
+No Service model
+No Service controller
+No Service route
+No Service admin form
+No Service data table
 ```
 
-### Infinite scroll on homepage product list
+Implementing Service CRUD would be a separate feature requiring a new model,
+controller, routes, admin screens, and frontend state/API flow. It is not
+silently treated as implemented by the existing Product CRUD.
 
-- `frontend/src/Components/Home.jsx`
-  - Registers a window `scroll` event.
-  - Requests `getProducts(page + 1, true)` when the viewport is within 500 pixels of the document bottom.
-  - Uses `hasMore`, `loadingMore`, and `loading` to prevent duplicate requests.
-  - Shows `Loading more products...` while an append request is active.
-  - Shows the end-of-list state when `hasMore` becomes false.
-- `frontend/src/actions/productActions.jsx`
-  - Uses the `append` flag to dispatch `productsAppend(data)`.
-- `frontend/src/reducers/productReducers.jsx`
-  - Merges the next page into the existing `products` array.
-- `backend/controllers/product.js` and `backend/utils/apiFeatures.js`
-  - Serve each requested page through the same filtered/paginated product query.
+---
 
-Infinite-scroll flow:
+# 16. Quick navigation index
 
-```text
-User scrolls homepage
-    -> Home scroll handler
-    -> if near bottom and hasMore, request page + 1
-    -> GET /api/v1/products?page=N plus active filters
-    -> backend returns up to 12 products
-    -> PRODUCTS_APPEND reducer action
-    -> existing product list + new products render
-```
-
-### Sales charts with date range filter
-
-- `frontend/src/Components/Admin/Dashboard.jsx`
-  - Renders the admin Overview charts.
-- `frontend/src/Components/Admin/DashboardOverview.jsx`
-  - Loads total products, users, orders, and sales metrics.
-- `frontend/src/Components/Admin/MonthlySalesChart.jsx`
-  - Renders a Recharts `LineChart`.
-  - Provides `startDate` and `endDate` date inputs.
-  - `load()` sends the selected values as query parameters to `GET /api/v1/admin/sales-per-month`.
-  - Reloads the chart when either date changes.
-- `frontend/src/Components/Admin/ProductSalesChart.jsx`
-  - Renders a Recharts `BarChart` using `GET /api/v1/admin/product-sales`.
-  - Shows the top 10 product sales returned by the backend.
-  - Does not currently render date-range inputs.
-- `frontend/src/Components/Admin/UserSalesChart.jsx`
-  - Renders a Recharts `BarChart` using `GET /api/v1/admin/customer-sales`.
-  - Shows customer sales totals returned by the backend.
-  - Does not currently render date-range inputs.
-- `backend/routes/order.js`
-  - Protects the analytics endpoints with authentication and the admin role.
-- `backend/controllers/order.js`
-  - `dateMatch(req)` converts `startDate` and `endDate` into a MongoDB `createdAt` range.
-  - `salesPerMonth` groups filtered orders by month/year and returns line-chart data.
-  - `productSales` groups order items by product name and limits the result to 10.
-  - `customerSales` groups orders by user and joins the `users` collection.
-- `backend/models/order.js`
-  - Provides `createdAt`, `totalPrice`, `orderItems`, and `user` fields used by the aggregations.
-
-Chart flow:
-
-```text
-Admin Dashboard
-    -> MonthlySalesChart date inputs
-    -> GET /api/v1/admin/sales-per-month?startDate=...&endDate=...
-    -> orderController.dateMatch()
-    -> MongoDB Order.aggregate()
-    -> MonthlySalesChart data state
-    -> Recharts LineChart
-```
-
-Status note: date-range filtering is fully wired for the monthly line chart. The backend aggregation helper supports the same date range for product/customer sales, but those two bar-chart components currently call their endpoints without date query parameters.
-
-### Completed transaction
-
-- `frontend/src/App.jsx`
-  - Owns cart and shipping state and persists them to local storage.
-  - Provides `addItemToCart`, `removeItemFromCart`, `updateCartQuantity`, and `clearCart` to checkout components.
-- `frontend/src/Components/Cart/Cart.jsx`
-  - Displays cart products, quantities, line totals, and checkout navigation.
-- `frontend/src/Components/Cart/Shipping.jsx`
-  - Collects shipping information and navigates to confirmation.
-- `frontend/src/Components/Cart/ConfirmOrder.jsx`
-  - Displays the order confirmation before payment/order submission.
-- `frontend/src/Components/Cart/Payment.jsx`
-  - Submits the order through `POST /api/v1/order/new`.
-  - Sends COD payment data and clears the cart after success.
-- `frontend/src/Components/Cart/OrderSuccess.jsx`
-  - Displays the successful order confirmation page.
-- `backend/routes/order.js`
-  - Registers `POST /api/v1/order/new`.
-- `backend/controllers/order.js`
-  - `newOrder` verifies products and stock, recalculates prices from the database, creates the order, decrements stock, and triggers the receipt notification.
-- `backend/models/order.js`
-  - Stores shipping info, order items, payment info, subtotal, tax, shipping, grand total, and status.
-- `backend/models/product.js`
-  - Provides the authoritative product price and stock used during order creation.
-
-Transaction path:
-
-```text
-Product card
-    -> App.addItemToCart()
-    -> Cart.jsx
-    -> Shipping.jsx
-    -> ConfirmOrder.jsx
-    -> Payment.submit()
-    -> POST /api/v1/order/new
-    -> orderController.newOrder()
-    -> Product.findById() and stock validation
-    -> Order.create()
-    -> Product.findByIdAndUpdate() stock decrement
-    -> OrderSuccess.jsx
-```
-
-Status note: the transaction flow is implemented for Cash on Delivery. Stripe, PayPal, card processing, payment intents, webhooks, and payment verification are not implemented.
-
-### Transaction email and PDF receipt
-
-- `backend/controllers/order.js`
-  - Builds the customer email after a new order is created.
-  - Sends each product name, quantity, and line total in the email body.
-  - Includes the subtotal and grand total in the email body.
-  - Also attaches the generated PDF receipt.
-  - Sends the same receipt email when an admin updates an order status.
-- `backend/utils/sendEmail.js`
-  - Sends the email through the configured SMTP transport.
-  - Supports PDF attachments through Nodemailer.
-- `backend/utils/receiptPdf.js`
-  - Generates the PDF receipt with products, subtotal, tax, shipping, grand total, customer, order, and payment details.
-- `backend/routes/order.js`
-  - `POST /api/v1/order/new` triggers the order confirmation email.
-  - `PUT /api/v1/admin/order/:id` triggers a status-update email with the receipt.
-- `backend/models/order.js`
-  - Stores the order products in `orderItems` and totals in `itemsPrice`, `taxPrice`, `shippingPrice`, and `totalPrice`.
-
-### User review/rating update
-
-- `frontend/src/Components/Order/ListOrders.jsx`
-  - Shows the review form only for items in delivered orders.
-  - Sends the user's product ID, rating, and comment to `PUT /api/v1/review`.
-  - Keeps the submitted state in local component state after a successful submission.
-- `backend/controllers/product.js`
-  - `createOrUpdateReview` requires that the authenticated user purchased and received the product.
-  - Finds an existing review by the authenticated user's ID and updates its rating/comment with `Object.assign`.
-  - Creates a new review when the user has not reviewed the product yet.
-  - Recalculates `numOfReviews` and the product's aggregate `ratings` after either create or update.
-- `backend/routes/product.js`
-  - `PUT /api/v1/review` is the user review create/update endpoint.
-- `backend/models/product.js`
-  - Stores the review owner in `reviews.user`, along with `rating` and `comment`.
-
-The current frontend does not expose a direct edit button after submission during the same session. Reloading the orders page allows the user to submit the review again, and the backend updates the existing review instead of creating a duplicate.
-
-### Admin review deletion
-
-- `frontend/src/Components/Admin/Dashboard.jsx`
-  - Registers the `Reviews` admin tab.
-- `frontend/src/Components/Admin/ProductReviews.jsx`
-  - Loads admin reviews from `GET /api/v1/admin/reviews`.
-  - Renders the Delete action for each review.
-  - `remove(review)` sends `DELETE /api/v1/reviews` with `productId` and review `id`.
-  - Removes the deleted review from the local table and shows a success message.
-- `backend/routes/product.js`
-  - Protects `DELETE /api/v1/reviews` with `isAuthenticatedUser` and `authorizeRoles('admin')`.
-- `backend/controllers/product.js`
-  - `deleteReview` finds the product, removes the matching embedded review, recalculates `numOfReviews` and aggregate `ratings`, then saves the product.
-- `backend/models/product.js`
-  - Stores reviews inside the Product document and stores the recalculated `ratings` and `numOfReviews` fields.
-
-Status note: the delete flow is implemented, but `deleteReview` does not explicitly return an error when the supplied review ID does not match an embedded review. This is documented as a validation gap rather than a missing feature.
-
-### Bad-words review masking
-
-- `backend/utils/profanityFilter.js`
-  - Defines the actual English and Filipino `blockedWords` list.
-  - Builds a Unicode-aware regular expression with word boundaries.
-  - Exports `maskProfanity(value)` and replaces matched non-space characters with asterisks.
-- `backend/controllers/product.js`
-  - Imports `maskProfanity` from `../utils/profanityFilter`.
-  - Masks the authenticated user's name and review comment in `createOrUpdateReview` before saving.
-  - Masks review names and comments again in `getProductReviews` and `getAdminReviews` before returning them.
-
-Status note: the requested masking behavior is implemented, but the `bad-words` npm package itself is not present in `backend/package.json` and no import of that package was found. The system uses the custom `blockedWords` and `maskProfanity` implementation instead.
-
-### Form validation: Product CRUD, User Login, and Update Profile
-
-- `frontend/src/Utils/validation.js`
-  - Imports Yup from `yup`.
-  - Defines `productSchema` for product name, slug, brand, SKU, price, stock, and description.
-  - Defines `loginSchema` for valid email and minimum six-character password.
-  - Defines `profileSchema` for a trimmed name with a minimum length of two characters.
-  - Exports the shared async `validate(schema, value)` helper with `abortEarly: false`.
-- `frontend/src/Components/Admin/NewProduct.jsx`
-  - Calls `validate(productSchema, ...)` before creating a product.
-  - Converts price and stock to numbers before validation.
-- `frontend/src/Components/Admin/UpdateProduct.jsx`
-  - Calls `validate(productSchema, ...)` before updating a product.
-  - Converts price and stock to numbers before validation.
-- `frontend/src/Components/User/Login.jsx`
-  - Calls `validate(loginSchema, { email, password })` before Firebase sign-in.
-- `frontend/src/Components/User/Profile.jsx`
-  - Calls `validate(profileSchema, { name })` before sending the profile update.
-- `frontend/package.json`
-  - Includes the `yup` dependency.
-
-Library status: Yup is implemented. No `formik`, `Formik`, `useFormik`, `react-hook-form`, or `useForm` usage was found. The forms use React `useState`, native `onSubmit`, and the shared Yup helper instead.
-
-### Review filter status
-
-The system has review management, but not a review filter yet:
-
-- `frontend/src/Components/Admin/ProductReviews.jsx`
-  - Loads all admin reviews from `GET /api/v1/admin/reviews`.
-  - Displays product, reviewer, rating, and comment columns.
-  - Supports deleting a review, but has no filter controls.
-- `frontend/src/Components/Product/ProductDetails.jsx`
-  - Loads the selected product and its review data for the product detail view.
-- `backend/controllers/product.js`
-  - `getAdminReviews` returns the admin review list.
-  - `getProductReviews` returns reviews for a product.
-  - `deleteReview` deletes a review and recalculates the product rating.
-- `backend/routes/product.js`
-  - `GET /api/v1/admin/reviews`
-  - `GET /api/v1/reviews`
-  - `DELETE /api/v1/reviews`
-- `backend/models/product.js`
-  - Defines the embedded `reviews` array, `ratings`, and `numOfReviews` fields.
-
-### Ratings filter
-
-- `frontend/src/Components/Home.jsx`
-  - Renders the `Minimum rating` selector with `Any rating`, `4+ stars`, and `4.5+ stars` options.
-  - Sends the selected value as `rating: gte:<value>`.
-  - Reloads the product list when the selected rating changes.
-- `frontend/src/actions/productActions.jsx`
-  - Sends the ratings query string to `GET /api/v1/products`.
-- `backend/utils/apiFeatures.js`
-  - Converts the `rating: gte:<value>` query into a MongoDB `ratings: { $gte: value }` filter.
-- `backend/controllers/product.js`
-  - Applies the shared ratings filter in `getProducts`.
-- `backend/models/product.js`
-  - Stores the aggregate product rating in the `ratings` field, constrained from 0 to 5.
-
-### Category filter
-
-- `frontend/src/Components/Home.jsx`
-  - Defines the available product categories.
-  - Renders the category filter buttons, including `All categories`.
-  - Sends the selected category as the `category` query parameter.
-  - Reloads the product list when the selected category changes.
-- `frontend/src/actions/productActions.jsx`
-  - Sends the category query string to `GET /api/v1/products`.
-- `backend/utils/apiFeatures.js`
-  - Converts the category query parameter into a MongoDB field filter.
-- `backend/controllers/product.js`
-  - Applies the shared category filter in `getProducts`.
-- `backend/models/product.js`
-  - Defines the allowed category values through the product schema enum.
-
-### Price filter
-
-- `frontend/src/Components/Home.jsx`
-  - Renders the maximum-price range slider from PHP 0 to PHP 160,000.
-  - Sends the selected value as the `price[lte]` query parameter.
-  - Reloads the product list when the selected maximum changes.
-- `frontend/src/Components/HomeFilters.css`
-  - Styles the price filter and range labels.
-- `frontend/src/actions/productActions.jsx`
-  - Sends the filter query string to `GET /api/v1/products`.
-- `backend/utils/apiFeatures.js`
-  - Translates `price[lte]` into a MongoDB `$lte` filter.
-- `backend/controllers/product.js`
-  - Applies the shared search/filter pipeline in `getProducts`.
-
-### Frontend
-
-- `frontend/src/Components/Admin/ProductsList.jsx`
-  - Product datatable/table rendering
-  - Search by name, brand, SKU, and category
-  - Sorting by name, price, or stock
-  - Row checkboxes and select-all-visible checkbox
-  - Single delete and bulk delete actions
-- `frontend/src/Components/Admin/NewProduct.jsx`
-  - Product creation form
-  - Multiple image input using `multiple`
-  - Image preview before upload
-- `frontend/src/Components/Admin/UpdateProduct.jsx`
-  - Product edit form
-  - Multiple additional image upload
-  - Existing image removal
-- `frontend/src/Components/Admin/Dashboard.jsx`
-  - Registers the Products admin tab and switches between list, create, and update views
-- `frontend/src/Components/Admin/Admin.css`
-  - Admin table, toolbar, action, and form styling
-- `frontend/src/Components/Admin/AdminImages.css`
-  - Product thumbnail and image-manager styling
-
-### Backend
-
-- `backend/models/product.js`
-  - Product data model, including the `images` array with `public_id` and `url`
-- `backend/controllers/product.js`
-  - `newProduct`: uploads all received files and creates the product
-  - `updateProduct`: uploads additional files and appends them to existing images
-  - `deleteProduct`: deletes one product and its Cloudinary images
-  - `bulkDeleteProducts`: deletes selected products and their Cloudinary images
-  - `deleteProductImage`: removes one image from an existing product
-  - `getAdminProducts`: returns products for the admin table
-- `backend/routes/product.js`
-  - `POST /api/v1/admin/product/new`
-  - `GET /api/v1/admin/products`
-  - `PUT /api/v1/admin/product/:id`
-  - `DELETE /api/v1/admin/product/:id`
-  - `DELETE /api/v1/admin/products/bulk`
-  - `DELETE /api/v1/admin/product/:id/image/:imageId`
-- `backend/utils/multer.js`
-  - Accepts JPEG, PNG, and WebP files
-  - Limits each file to 5 MB
-- `backend/utils/cloudinary.js`
-  - Provides image upload and deletion used by product CRUD
-
-All product admin routes require authentication and the `admin` role.
-
-## Bulk delete behavior
-
-1. The table stores selected product IDs in `ProductsList.jsx`.
-2. The select-all checkbox applies to the currently visible, filtered products.
-3. The frontend sends `{ ids: [...] }` to `DELETE /api/v1/admin/products/bulk`.
-4. The backend removes the matching MongoDB documents and deletes their Cloudinary images.
-
-## Service CRUD gap
-
-The current application is a UPS product store and has no separate service domain. A complete Service implementation would require at least:
-
-- `backend/models/service.js`
-- Service controller and admin routes
-- Service admin list/create/update screens
-- Service tab or navigation entry in `frontend/src/Components/Admin/Dashboard.jsx`
-- Service API calls and validation
-
-No Service files were added because no service fields or workflow are defined in the current requirements. The Product implementation above is already available for the requested catalog workflow.
+| Feature | Start file | Backend anchor |
+|---|---|---|
+| Product table | `frontend/src/Components/Admin/ProductsList.jsx` | `backend/controllers/product.js:getAdminProducts` |
+| Create product | `frontend/src/Components/Admin/NewProduct.jsx` | `newProduct` |
+| Update product | `frontend/src/Components/Admin/UpdateProduct.jsx` | `updateProduct` |
+| Multiple images | `NewProduct.jsx`, `UpdateProduct.jsx` | `utils/multer.js`, `utils/cloudinary.js` |
+| Bulk delete | `ProductsList.jsx` | `bulkDeleteProducts` |
+| Price/category/rating filters | `frontend/src/Components/Home.jsx` | `utils/apiFeatures.js` |
+| Customer review | `frontend/src/Components/Order/ListOrders.jsx` | `createOrUpdateReview` |
+| Admin review delete | `frontend/src/Components/Admin/ProductReviews.jsx` | `deleteReview` |
+| Checkout | `frontend/src/Components/Cart/Payment.jsx` | `newOrder` |
+| Order status | `frontend/src/Components/Admin/OrdersList.jsx` | `updateOrder` |
+| Email/PDF | — | `notifyOrder`, `receiptPdf`, `sendEmail` |
+| Validation | `frontend/src/Utils/validation.js` | Mongoose schema validation |
+| Charts | `frontend/src/Components/Admin/*Chart.jsx` | order analytics controllers |
+| Redux | `frontend/src/store.js` | — |

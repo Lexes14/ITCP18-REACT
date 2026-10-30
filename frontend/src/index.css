@@ -1,5 +1,19 @@
-@import 'tailwindcss';
-:root { font-family: Inter, sans-serif; color: #111827; background: #f8fafc; font-synthesis: none; }
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
-button, input, select { font: inherit; }
+@import "tailwindcss";
+:root {
+  font-family: Inter, sans-serif;
+  color: #111827;
+  background: #f8fafc;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button,
+input,
+select {
+  font: inherit;
+}

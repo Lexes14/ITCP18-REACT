@@ -1,1 +1,109 @@
-.image-manager{display:grid;gap:10px;padding:14px;background:#f8fafc;border:1px solid var(--line);border-radius:6px}.image-manager-grid{display:flex;flex-wrap:wrap;gap:12px}.managed-image{position:relative;width:112px;height:92px;border:1px solid var(--line);border-radius:5px;background:white;overflow:hidden}.managed-image img{width:100%;height:100%;object-fit:cover}.image-remove{position:absolute;bottom:4px;left:4px;right:4px;border:0;border-radius:3px;background:rgba(127,29,29,.92);color:white;padding:5px;font-size:11px;cursor:pointer}.admin-product-thumb{width:56px;height:44px;display:block;object-fit:cover;border-radius:4px;background:#e2e8f0}.admin-product-thumb[src=""]{display:none}.admin-actions,.admin-toolbar{display:flex;gap:10px;align-items:center}.admin-toolbar{margin-bottom:18px}.admin-toolbar input{flex:1;min-width:180px;padding:10px;border:1px solid var(--line);border-radius:5px}.admin-toolbar select{padding:10px;border:1px solid var(--line);border-radius:5px;background:white}.chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.chart-grid .admin-panel:first-child{grid-column:1/-1}.chart-filters{display:flex;gap:8px}.chart-filters input{padding:8px;border:1px solid var(--line);border-radius:4px}@media(max-width:760px){.admin-actions,.admin-toolbar,.chart-filters{align-items:stretch;flex-direction:column}.admin-actions button,.admin-toolbar input,.admin-toolbar select,.chart-filters input{width:100%;box-sizing:border-box}.chart-grid{grid-template-columns:1fr}}
+.image-manager {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.image-manager-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.managed-image {
+  position: relative;
+  width: 112px;
+  height: 92px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  overflow: hidden;
+}
+.managed-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.image-remove {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(127, 29, 29, 0.92);
+  color: white;
+  padding: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.admin-product-thumb {
+  width: 56px;
+  height: 44px;
+  display: block;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #e2e8f0;
+}
+.admin-product-thumb[src=""] {
+  display: none;
+}
+.admin-actions,
+.admin-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.admin-toolbar {
+  margin-bottom: 18px;
+}
+.admin-toolbar input {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.admin-toolbar select {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+}
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.chart-grid .admin-panel:first-child {
+  grid-column: 1/-1;
+}
+.chart-filters {
+  display: flex;
+  gap: 8px;
+}
+.chart-filters input {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+@media (max-width: 760px) {
+  .admin-actions,
+  .admin-toolbar,
+  .chart-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-actions button,
+  .admin-toolbar input,
+  .admin-toolbar select,
+  .chart-filters input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+}

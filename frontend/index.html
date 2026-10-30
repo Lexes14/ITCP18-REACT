@@ -1,1 +1,42 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#111827"/><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet"><title>UPS Battery Store</title></head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111827" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+    <title>UPS Battery Store</title>
+    <style>
+      #initial-loader {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        gap: 12px;
+        color: #64748b;
+        font: 600 16px Inter, sans-serif;
+      }
+      #initial-loader::before {
+        content: "";
+        width: 32px;
+        height: 32px;
+        border: 3px solid #dbe4ee;
+        border-top-color: #a3e635;
+        border-radius: 50%;
+        animation: initial-spin 0.8s linear infinite;
+      }
+      @keyframes initial-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div id="initial-loader">Loading store...</div></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

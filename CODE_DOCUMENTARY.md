@@ -4,6 +4,52 @@
 
 This is a code-navigation manual for the existing UPS Battery Store repository. It maps user actions to the actual frontend component, handler, API request, backend route, controller, model, database operation, response, and UI update where that path exists.
 
+It is the full system documentary for the ITCP318 project. The focused,
+step-by-step documentary for the CRUD and graded feature paths is
+[`CRUD_FEATURES.md`](./CRUD_FEATURES.md). Use that file when tracing one
+requirement from the screen to the database; use this file for the complete
+architecture, routing, API, startup, dependency, file-by-file, and risk
+reference.
+
+## How to use this documentary
+
+1. Start with the feature index near the end of this file.
+2. Open the listed frontend component and locate the handler named in the
+   table.
+3. Follow the request to the matching route in `backend/routes`.
+4. Read the controller in `backend/controllers` to see validation and
+   business rules.
+5. Follow the model and utility calls to see database and external-service
+   side effects.
+6. Return to the reducer or component to see how the response changes the UI.
+
+Unless a section says otherwise, a status describes the actual code path
+found in this repository, not a planned feature. Missing external credentials
+can prevent runtime verification even when the code path exists.
+
+## Master feature coverage
+
+The detailed implementation traces for these areas are in
+[`CRUD_FEATURES.md`](./CRUD_FEATURES.md). The project requirements are
+documented by behavior and code path; grading point values are intentionally
+not repeated here.
+
+| Area | Main frontend starting point | Main backend starting point | Current implementation |
+|---|---|---|---|
+| Product CRUD table | `frontend/src/Components/Admin/ProductsList.jsx` | `backend/routes/product.js` | Product list, create, update, single delete, and bulk delete. |
+| Multiple photos | `frontend/src/Components/Admin/NewProduct.jsx` | `backend/utils/multer.js`, `cloudinary.js` | Multipart upload of up to 10 images. |
+| Product filters | `frontend/src/Components/Home.jsx` | `backend/utils/apiFeatures.js` | Price, category, rating, keyword, and battery-type filters. |
+| Review and rating | `frontend/src/Components/Order/ListOrders.jsx` | `backend/controllers/product.js` | Delivered customers can create/update; admins can delete. |
+| Review filtering | `frontend/src/Components/Admin/ProductReviews.jsx` | No filter endpoint | Not implemented; list and delete are available. |
+| Checkout and orders | `frontend/src/Components/Cart/Payment.jsx` | `backend/controllers/order.js` | COD transaction, stock update, order history, and status flow. |
+| Email and receipt | — | `notifyOrder`, `receiptPdf`, `sendEmail` | Email body and PDF attachment require SMTP configuration. |
+| Validation and masking | `frontend/src/Utils/validation.js` | `backend/utils/profanityFilter.js` | Yup forms and custom profanity masking. |
+| Sales analytics | `frontend/src/Components/Admin/*Chart.jsx` | Order aggregation controllers | Recharts dashboard charts; monthly chart has date inputs. |
+| Pagination/infinite scroll | `frontend/src/Components/Home.jsx` | `getProducts` + `APIFeatures` | Server pagination with client infinite-scroll append. |
+| Authentication | `frontend/src/Components/User/Login.jsx` | `backend/middlewares/auth.js` | Firebase email/password and Google login. |
+| State management | `frontend/src/store.js` | — | Redux reducers and thunk actions. |
+| Service CRUD | No active service component | No service model/route | Not implemented; only Product CRUD exists. |
+
 Status labels used here:
 
 - `COMPLETED`: the requested behavior is present in the inspected code.

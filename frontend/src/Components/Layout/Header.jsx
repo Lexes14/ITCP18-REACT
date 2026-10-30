@@ -1,2 +1,2 @@
-const Header = () => null
-export default Header
+const Header = () => null;
+export default Header;

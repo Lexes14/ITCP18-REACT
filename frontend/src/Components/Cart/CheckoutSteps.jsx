@@ -1,2 +1,2 @@
-const CheckoutSteps = () => null
-export default CheckoutSteps
+const CheckoutSteps = () => null;
+export default CheckoutSteps;
