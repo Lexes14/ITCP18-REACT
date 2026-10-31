@@ -32,6 +32,51 @@
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+.product-image-carousel {
+  position: relative;
+  outline: none;
+  touch-action: pan-y;
+}
+.product-image-carousel:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px var(--lime);
+}
+.carousel-button {
+  position: absolute;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: rgb(17 24 39 / 78%);
+  color: #fff;
+  cursor: pointer;
+  font-size: 32px;
+  line-height: 1;
+}
+.carousel-button:hover {
+  background: var(--ink);
+}
+.carousel-previous {
+  left: 12px;
+}
+.carousel-next {
+  right: 12px;
+}
+.carousel-counter {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgb(17 24 39 / 78%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
 .product-detail-placeholder {
   display: flex;
   align-items: center;
