@@ -1,569 +1,506 @@
-# Render Deployment Guide
+# Exact Render Deployment Steps
 
-This guide deploys the UPS Battery Store as two Render services:
-
-1. **Backend**: Render Web Service running Express.
-2. **Frontend**: Render Static Site running the Vite production build.
-
-The backend and frontend must be deployed separately because the frontend is a
-static Vite application while the backend is a Node/Express API.
-
-The examples below use:
+Ang setup na ito ay may **dalawang GitHub repositories** at **dalawang Render
+services**:
 
 ```text
-Repository: Lexes14/ITCP18-REACT
-Backend root directory: backend
-Frontend root directory: frontend
-Backend health endpoint: /api/v1/health
+GitHub repository 1: itcp318-backend
+GitHub repository 2: itcp318-frontend
+Render service 1: Backend Web Service
+Render service 2: Frontend Static Site
 ```
 
-Do not copy real passwords, API keys, SMTP credentials, Cloudinary secrets, or
-Firebase service-account JSON into this Markdown file, Git, or the browser
-frontend. Put them only in Render Environment Variables or Secret Files.
+## Important security rule
+
+Huwag i-paste sa GitHub o sa dokumentong ito ang aktuwal na:
+
+- MongoDB password o buong `MONGO_URI`
+- Cloudinary API secret
+- SMTP password
+- Firebase Admin service-account JSON
+
+Ang values sa ibaba na may `YOUR_...` ay papalitan mo sa Render gamit ang
+credentials na kukunin sa instructions.
 
 ---
 
-## 1. Prepare the external services first
+# Part 1 - Gumawa ng dalawang GitHub repositories
 
-Complete these services before creating the Render services:
+## 1.1 Gumawa ng empty repositories sa GitHub
 
-- MongoDB Atlas
-- Firebase Authentication and Firebase Admin
-- Cloudinary
-- SMTP provider for order emails
+Sa GitHub, piliin ang **New repository** nang dalawang beses:
 
-### 1.1 MongoDB Atlas
+```text
+itcp318-backend
+itcp318-frontend
+```
 
-1. Open MongoDB Atlas and create or select the project and cluster.
-2. Create a database user with a strong password.
-3. Add a Network Access entry that allows Render to connect.
-   - For a class deployment, `0.0.0.0/0` is the usual option.
-   - Restrict it further if your MongoDB plan and network setup support it.
-4. Copy the application connection string.
-5. Replace the password placeholder and use a database name such as:
+Piliin ang **Private** kung maaari. Huwag magdagdag ng README, `.gitignore`,
+o license dahil mayroon nang project files.
+
+Kopyahin ang GitHub username mo. Sa commands sa ibaba, palitan ang
+`YOUR_GITHUB_USERNAME`.
+
+## 1.2 I-push ang backend repository
+
+Buksan ang PowerShell at patakbuhin nang sunod-sunod:
+
+```powershell
+cd C:\itcp318
+New-Item -ItemType Directory -Force C:\itcp318-deploy
+New-Item -ItemType Directory -Force C:\itcp318-deploy\itcp318-backend
+robocopy C:\itcp318\backend C:\itcp318-deploy\itcp318-backend /E /XD node_modules dist /XF .env firebase-service-account.json
+cd C:\itcp318-deploy\itcp318-backend
+@"
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+config/.env
+firebase-service-account.json
+"@ | Set-Content .gitignore
+git init
+git branch -M main
+git add .
+git commit -m "Prepare backend for Render"
+git remote add origin https://github.com/YOUR_GITHUB_USERNAME/itcp318-backend.git
+git push -u origin main
+```
+
+## 1.3 I-push ang frontend repository
+
+```powershell
+cd C:\itcp318
+New-Item -ItemType Directory -Force C:\itcp318-deploy\itcp318-frontend
+robocopy C:\itcp318\frontend C:\itcp318-deploy\itcp318-frontend /E /XD node_modules dist /XF .env
+cd C:\itcp318-deploy\itcp318-frontend
+@"
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+"@ | Set-Content .gitignore
+git init
+git branch -M main
+git add .
+git commit -m "Prepare frontend for Render"
+git remote add origin https://github.com/YOUR_GITHUB_USERNAME/itcp318-frontend.git
+git push -u origin main
+```
+
+Sa bawat `git push`, mag-login sa GitHub kapag tinanong. Ang dalawang
+repositories ay dapat may `package.json` sa root nila:
+
+```text
+itcp318-backend/package.json
+itcp318-backend/server.js
+itcp318-frontend/package.json
+itcp318-frontend/index.html
+```
+
+---
+
+# Part 2 - Ihanda ang credentials
+
+## 2.1 MongoDB Atlas: `MONGO_URI`
+
+1. Pumunta sa [MongoDB Atlas](https://cloud.mongodb.com).
+2. Piliin ang project at cluster.
+3. Pumunta sa **Database Access**.
+4. Gumawa o gamitin ang database user at password.
+5. Pumunta sa **Network Access**.
+6. Piliin ang **Add IP Address**.
+7. Para sa Render deployment, ilagay ang:
+
+```text
+0.0.0.0/0
+```
+
+8. Pumunta sa **Database > Connect > Drivers**.
+9. Piliin ang **Node.js**.
+10. Kopyahin ang connection string.
+11. Palitan ang `<password>` ng database-user password.
+12. Gamitin ang database name na `ups-battery-store`.
+
+Ito ang ilalagay sa Render backend bilang `MONGO_URI`:
 
 ```text
 mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/ups-battery-store?retryWrites=true&w=majority
 ```
 
-Do not put this URI in the frontend.
+Huwag ilagay ang `MONGO_URI` sa frontend.
 
-### 1.2 Firebase web application
+## 2.2 Firebase web values
 
-1. Open Firebase Console and select the project.
-2. In **Authentication > Sign-in method**, enable:
-   - Email/Password
-   - Google, if Google login is required
-3. In **Project settings > Your apps**, copy the web app configuration.
-4. Keep these values for the frontend Render environment variables:
-   - API key
-   - Auth domain
-   - Project ID
-   - Storage bucket
-   - Messaging sender ID
-   - App ID
-5. In **Authentication > Settings > Authorized domains**, add the final
-   Render frontend hostname, for example:
+1. Pumunta sa [Firebase Console](https://console.firebase.google.com).
+2. Piliin ang Firebase project.
+3. Pumunta sa **Project settings**.
+4. Sa **Your apps**, piliin ang Web app.
+5. Kung wala pang Web app, piliin ang **Add app > Web**.
+6. Kopyahin ang values mula sa Firebase config:
 
 ```text
-your-frontend.onrender.com
+apiKey              -> VITE_FIREBASE_API_KEY
+authDomain          -> VITE_FIREBASE_AUTH_DOMAIN
+projectId           -> VITE_FIREBASE_PROJECT_ID
+storageBucket       -> VITE_FIREBASE_STORAGE_BUCKET
+messagingSenderId   -> VITE_FIREBASE_MESSAGING_SENDER_ID
+appId               -> VITE_FIREBASE_APP_ID
 ```
 
-Do not add `https://` in the Authorized Domains field.
+7. Pumunta sa **Authentication > Sign-in method**.
+8. I-enable ang **Email/Password**.
+9. I-enable ang **Google** kung gagamitin ang Google login.
 
-### 1.3 Firebase Admin service account
+## 2.3 Firebase Admin Secret File
 
-1. In Firebase Console, open **Project settings > Service accounts**.
-2. Select **Generate new private key**.
-3. Save the downloaded JSON securely.
-4. Do not commit the JSON file.
-5. The file will be uploaded to the backend Render service as a Secret File
-   in Step 4.
+1. Sa Firebase **Project settings**, buksan ang **Service accounts**.
+2. Piliin ang **Generate new private key**.
+3. I-download ang JSON file.
+4. Itago ito. Huwag i-commit sa GitHub.
+5. Gagamitin ito sa Render **Secret Files** sa Part 4.
 
-The backend uses `admin.credential.applicationDefault()`. Render must
-therefore receive the service-account JSON as a file and the
-`GOOGLE_APPLICATION_CREDENTIALS` variable must point to that file.
+## 2.4 Cloudinary values
 
-### 1.4 Cloudinary
+1. Pumunta sa [Cloudinary Console](https://console.cloudinary.com).
+2. Sa Dashboard, kopyahin:
 
-From Cloudinary, keep:
+```text
+Cloud name        -> CLOUDINARY_CLOUD_NAME
+API Key           -> CLOUDINARY_API_KEY
+API Secret        -> CLOUDINARY_API_SECRET
+```
 
-- Cloud name
-- API key
-- API secret
+Ang API Secret ay backend-only.
 
-These are backend-only variables. The frontend does not need Cloudinary
-credentials.
+## 2.5 SMTP values
 
-### 1.5 SMTP
+Gamitin ang SMTP credentials mula sa inyong email provider o Mailtrap:
 
-Use an SMTP provider that permits the deployed application to send email.
-Keep:
+```text
+SMTP_HOST
+SMTP_PORT
+SMTP_SECURE
+SMTP_USER
+SMTP_PASS
+SMTP_FROM
+```
 
-- SMTP host
-- SMTP port
-- SMTP username
-- SMTP password
-- From address
+Karaniwang STARTTLS setup:
 
-Without SMTP variables, orders can still be created but customer email
-notifications will not be delivered.
+```text
+SMTP_PORT=587
+SMTP_SECURE=false
+```
+
+Kung walang SMTP setup, puwedeng gumana ang checkout pero hindi ipapadala ang
+email/PDF receipt.
 
 ---
 
-## 2. Check the repository before deployment
+# Part 3 - Gumawa ng Backend Web Service
 
-From PowerShell:
+1. Pumunta sa [Render Dashboard](https://dashboard.render.com).
+2. Piliin ang **New > Web Service**.
+3. Piliin ang GitHub repository na `itcp318-backend`.
+4. Piliin ang branch na `main`.
+5. Ilagay ang settings na ito:
 
-```powershell
-cd C:\itcp318
-git status
-```
-
-Confirm these files exist:
-
-```text
-backend/package.json
-backend/server.js
-backend/app.js
-backend/config/firebaseAdmin.js
-frontend/package.json
-frontend/vite.config.js
-frontend/index.html
-```
-
-Run the same checks Render will run:
-
-```powershell
-cd C:\itcp318\frontend
-npm install
-npm run build
-
-cd C:\itcp318\backend
-npm install
-node --check server.js
-```
-
-The frontend build output must be created in:
-
-```text
-frontend/dist
-```
-
-Do not use `npm run dev` as a Render production command.
-
----
-
-## 3. Deploy the backend Web Service
-
-### 3.1 Create the service
-
-1. Sign in to [Render](https://render.com).
-2. Select **New > Web Service**.
-3. Connect the GitHub repository.
-4. Select the repository branch to deploy.
-5. Use these exact settings:
-
-| Render setting | Value |
+| Render field | Ilagay |
 |---|---|
 | Name | `itcp318-backend` |
-| Region | Choose one region and use the same region for frontend if possible |
-| Root Directory | `backend` |
+| Region | Piliin ang pinakamalapit sa inyo |
+| Root Directory | blank |
 | Runtime | `Node` |
 | Build Command | `npm install` |
-| Start Command | `npm start` |
+| Start Command | `node server.js` |
 | Health Check Path | `/api/v1/health` |
 
-The backend `server.js` already reads Render's `PORT` variable:
+6. Huwag magtakda ng sariling `PORT`. Si Render ang nagbibigay ng `PORT`.
+7. Huwag pa munang gumawa ng `CLIENT_URL` kung wala pang frontend URL.
+8. Piliin ang **Create Web Service**.
+9. Hintaying maging **Live**.
 
-```js
-app.listen(Number(process.env.PORT) || 4001)
+Kopyahin ang backend URL na ibibigay ni Render, halimbawa:
+
+```text
+https://itcp318-backend.onrender.com
 ```
 
-Do not hard-code a Render port.
+Huwag gamitin ang example kung iba ang actual URL mo.
 
-### 3.2 Add backend environment variables
+---
 
-In the backend service, open **Environment > Add Environment Variable** and add
-the following. Use the actual production values; the values below are names
-and examples only.
+# Part 4 - Idagdag ang Backend Environment Variables
+
+Sa Render backend service:
+
+**Environment > Add Environment Variable**
+
+Idagdag ang mga sumusunod:
 
 | Key | Value |
 |---|---|
 | `NODE_ENV` | `production` |
-| `CLIENT_URL` | `https://YOUR-FRONTEND.onrender.com` |
-| `MONGO_URI` | MongoDB Atlas connection string |
+| `MONGO_URI` | MongoDB Atlas connection string mula Part 2.1 |
 | `DNS_SERVERS` | `1.1.1.1,8.8.8.8` |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
-| `CLOUDINARY_API_KEY` | Cloudinary API key |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret |
-| `SMTP_HOST` | SMTP host |
-| `SMTP_PORT` | `587` or provider port |
-| `SMTP_SECURE` | `false` for STARTTLS/587, `true` for implicit TLS |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary Cloud name mula Part 2.4 |
+| `CLOUDINARY_API_KEY` | Cloudinary API Key mula Part 2.4 |
+| `CLOUDINARY_API_SECRET` | Cloudinary API Secret mula Part 2.4 |
+| `SMTP_HOST` | SMTP host mula Part 2.5 |
+| `SMTP_PORT` | `587` o value ng provider |
+| `SMTP_SECURE` | `false` para sa port 587 |
 | `SMTP_USER` | SMTP username |
 | `SMTP_PASS` | SMTP password |
-| `SMTP_FROM` | Verified sender address |
+| `SMTP_FROM` | Verified sender email |
+| `CLIENT_URL` | Ilalagay pagkatapos gumawa ng frontend |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/etc/secrets/firebase-service-account.json` |
 
-Do not manually set `PORT` unless Render specifically requires it. Render
-provides `PORT` to the process automatically.
+## Idagdag ang Firebase Secret File
 
-`CLIENT_URL` must be the exact frontend origin, without a trailing slash:
-
-```text
-https://your-frontend.onrender.com
-```
-
-The backend CORS configuration compares this value with the browser origin.
-A wrong value causes browser CORS errors even when the API is running.
-
-### 3.3 Add the Firebase Secret File
-
-In the backend service:
-
-1. Open **Environment**.
-2. Find **Secret Files**.
-3. Add a secret file with this filename:
+1. Sa parehong Render backend service, pumunta sa **Environment**.
+2. Hanapin ang **Secret Files**.
+3. Piliin ang **Add Secret File**.
+4. Sa filename, ilagay nang eksakto:
 
 ```text
 firebase-service-account.json
 ```
 
-4. Paste the complete Firebase service-account JSON content.
-5. Save the secret file.
-6. Confirm the environment variable is exactly:
+5. Sa contents, i-paste ang buong Firebase Admin JSON na na-download sa
+   Part 2.3.
+6. I-save ang Secret File.
+7. I-save ang environment variables.
+8. Hintaying matapos ang automatic redeploy.
+
+Ang path na ginagamit ng backend ay eksaktong:
 
 ```text
-GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/firebase-service-account.json
+/etc/secrets/firebase-service-account.json
 ```
 
-Never paste the service-account JSON into a normal frontend variable. Never
-prefix it with `VITE_`.
-
-### 3.4 Deploy and test the backend
-
-Click **Create Web Service** or **Manual Deploy > Deploy latest commit**.
-Wait until the service is **Live**, then open:
+Subukan muna ang backend:
 
 ```text
-https://YOUR-BACKEND.onrender.com/api/v1/health
+https://YOUR-ACTUAL-BACKEND.onrender.com/api/v1/health
 ```
 
-Expected response:
+Expected:
 
 ```json
-{
-  "success": true,
-  "service": "UPS Battery Store"
-}
+{"success":true,"service":"UPS Battery Store"}
 ```
 
-If the health endpoint fails, do not deploy the frontend yet. Open the backend
-Render logs and fix the first startup error.
-
-Common backend startup errors:
-
-| Log message | Fix |
-|---|---|
-| `MongooseServerSelectionError` | Check `MONGO_URI` and Atlas Network Access. |
-| `Could not load the default credentials` | Check the Secret File filename and `GOOGLE_APPLICATION_CREDENTIALS` path. |
-| `Invalid service account` | Upload the complete, valid Firebase Admin JSON. |
-| `Cannot connect to SMTP` | Check SMTP host, port, credentials, and secure mode. |
-| `CORS` browser error | Set backend `CLIENT_URL` to the exact frontend URL. |
+Kapag hindi ito gumana, huwag munang gumawa ng frontend. Tingnan muna ang
+Render backend **Logs** at ayusin ang unang error.
 
 ---
 
-## 4. Deploy the frontend Static Site
+# Part 5 - Palitan ang Frontend API URL
 
-### 4.1 Create the static site
+Sa local frontend copy:
 
-1. Select **New > Static Site** in Render.
-2. Select the same GitHub repository and branch.
-3. Use these exact settings:
+```powershell
+New-Item -ItemType File -Force C:\itcp318-deploy\itcp318-frontend\.env
+notepad C:\itcp318-deploy\itcp318-frontend\.env
+```
 
-| Render setting | Value |
+Palitan ang `VITE_API_URL` gamit ang actual backend URL:
+
+```env
+VITE_API_URL=https://YOUR-ACTUAL-BACKEND.onrender.com/api/v1
+```
+
+Ang ibang frontend variables ay:
+
+```env
+VITE_FIREBASE_API_KEY=Firebase apiKey
+VITE_FIREBASE_AUTH_DOMAIN=Firebase authDomain
+VITE_FIREBASE_PROJECT_ID=Firebase projectId
+VITE_FIREBASE_STORAGE_BUCKET=Firebase storageBucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=Firebase messagingSenderId
+VITE_FIREBASE_APP_ID=Firebase appId
+```
+
+Palitan ang text na `Firebase ...` gamit ang values mula Part 2.2.
+
+I-check ang build bago i-push:
+
+```powershell
+cd C:\itcp318-deploy\itcp318-frontend
+npm install
+npm run build
+git add .
+git commit -m "Configure production API URL"
+git push
+```
+
+> Ang `.env` values na may `VITE_` ay napupunta sa browser build. Huwag
+> ilagay rito ang MongoDB, Cloudinary secret, SMTP password, o Admin JSON.
+
+---
+
+# Part 6 - Gumawa ng Frontend Static Site
+
+1. Sa Render Dashboard, piliin ang **New > Static Site**.
+2. Piliin ang GitHub repository na `itcp318-frontend`.
+3. Piliin ang branch na `main`.
+4. Ilagay nang eksakto:
+
+| Render field | Ilagay |
 |---|---|
 | Name | `itcp318-frontend` |
-| Root Directory | `frontend` |
-| Build Command | `npm install && npm run build` |
+| Root Directory | blank |
+| Build Command | `npm run build` |
 | Publish Directory | `dist` |
 
-The frontend build runs at deploy time, so `VITE_*` variables must be present
-before the build starts.
+5. Sa **Environment**, idagdag ang parehong `VITE_*` values na nasa local
+   frontend `.env`.
+6. Piliin ang **Create Static Site**.
+7. Hintaying maging **Live**.
 
-### 4.2 Add frontend environment variables
+Kopyahin ang actual frontend URL, halimbawa:
 
-In the frontend static site, open **Environment** and add:
+```text
+https://itcp318-frontend.onrender.com
+```
 
-| Key | Value |
-|---|---|
-| `VITE_API_URL` | `https://YOUR-BACKEND.onrender.com/api/v1` |
-| `VITE_FIREBASE_API_KEY` | Firebase web API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID |
-| `VITE_FIREBASE_APP_ID` | Firebase web app ID |
+---
 
-Important:
+# Part 7 - Ayusin ang CORS
 
-- `VITE_API_URL` must end with `/api/v1`.
-- Use `https://`, not `http://`.
-- Do not put `MONGO_URI`, Cloudinary secret, SMTP password, or Firebase Admin
-  service-account content in the frontend.
-- Any `VITE_*` value is visible in the built browser JavaScript. Only use
-  Firebase web configuration values there.
+## 7.1 Backend Render variable
 
-Click **Create Static Site** or redeploy after adding the variables.
+Sa Render backend service:
 
-### 4.3 Configure React Router rewrites
+**Environment > Add/Edit Environment Variable**
 
-The application uses React Router. Without a rewrite, opening or refreshing a
-route such as `/login`, `/dashboard`, or `/product/ID` can return a Render
-404.
+Itakda:
 
-In the frontend Static Site, open **Redirects/Rewrites** and add:
+```text
+Key:   CLIENT_URL
+Value: https://YOUR-ACTUAL-FRONTEND.onrender.com
+```
+
+Rules:
+
+- `https://` dapat kasama.
+- Walang `/` sa dulo.
+- Walang `/api/v1`.
+
+Piliin ang **Save Changes** at hintaying matapos ang redeploy.
+
+## 7.2 Optional local fallback
+
+Hindi kailangan baguhin ang `backend/app.js` dahil ginagamit na nito ang
+`process.env.CLIENT_URL`. Kung gusto pa ring lagyan ng fallback, ang code ay:
+
+```js
+origin: process.env.CLIENT_URL || "http://localhost:5173",
+```
+
+Sa production, ang Render `CLIENT_URL` ang gagamitin.
+
+---
+
+# Part 8 - Firebase Authorized Domain
+
+1. Firebase Console → **Authentication**.
+2. Buksan ang **Settings** tab.
+3. Sa **Authorized domains**, piliin ang **Add domain**.
+4. Ilagay ang frontend hostname lamang:
+
+```text
+YOUR-ACTUAL-FRONTEND.onrender.com
+```
+
+Huwag ilagay ang `https://`.
+
+---
+
+# Part 9 - React Router rewrite
+
+Sa Render frontend Static Site:
+
+1. Buksan ang **Redirects/Rewrites**.
+2. Magdagdag ng:
 
 | Source | Destination | Action |
 |---|---|---|
 | `/*` | `/index.html` | Rewrite |
 
-Save and redeploy the frontend.
+3. I-save.
+4. Mag-redeploy kung hiningi ni Render.
+
+Ito ang kailangan para gumana ang refresh sa `/login`, `/dashboard`,
+`/product/...`, at ibang React routes.
 
 ---
 
-## 5. Connect and test the deployed system
+# Part 10 - Final test
 
-Use this order so each failure is easy to identify.
-
-### 5.1 Backend health
-
-Open:
+1. Buksan ang actual frontend URL.
+2. Sa browser Developer Tools → **Network**, siguraduhing ang API requests ay
+   ganito ang format:
 
 ```text
-https://YOUR-BACKEND.onrender.com/api/v1/health
+https://YOUR-ACTUAL-BACKEND.onrender.com/api/v1/...
 ```
 
-It must return the expected JSON before frontend testing.
+3. Siguraduhing walang request na may `localhost`.
+4. Test:
+   - homepage at product list
+   - product details at multiple images
+   - price/category/rating filters
+   - register/login
+   - Google login kung enabled
+   - cart at COD checkout
+   - user orders
+   - admin dashboard
+   - product CRUD
+   - multiple image upload
+   - order status update
+   - email/PDF kung naka-configure ang SMTP
 
-### 5.2 Public product API
-
-Open:
-
-```text
-https://YOUR-BACKEND.onrender.com/api/v1/products
-```
-
-It should return a JSON response. If it returns a database error, fix MongoDB
-Atlas before continuing.
-
-### 5.3 Frontend loading
-
-Open:
-
-```text
-https://YOUR-FRONTEND.onrender.com
-```
-
-Open the browser developer tools and confirm:
-
-- No request still points to `localhost`.
-- Product requests use the deployed backend URL.
-- There are no CORS errors.
-- The browser console has no Firebase configuration error.
-
-### 5.4 Authentication
-
-Test:
-
-1. Register a test account.
-2. Sign in with email/password.
-3. Sign in with Google if enabled.
-4. Confirm the user appears in the application.
-5. Confirm Firebase Authorized Domains contains the frontend hostname.
-
-### 5.5 Product and checkout
-
-Test with a non-production/test product:
-
-1. Open the product catalog.
-2. Test price, category, and rating filters.
-3. Open a product details page directly, then refresh it.
-4. Add an item to cart.
-5. Complete shipping, confirmation, and COD checkout.
-6. Confirm the order appears in the user's orders.
-7. As an admin, update the order status.
-8. Confirm the email and PDF receipt if SMTP is configured.
-
-### 5.6 Admin account
-
-Register through Firebase first. Then set the synchronized MongoDB user's role
-to `admin` in MongoDB Atlas:
-
-```js
-db.users.updateOne(
-  { email: "your-test-email@example.com" },
-  { $set: { role: "admin" } }
-)
-```
-
-Sign out and sign in again after changing the role. Do not store a password in
-this document.
-
----
-
-## 6. Optional product seeding
-
-Do not run the seed command automatically on every Render deploy. It can
-insert duplicate data or overwrite data depending on the seed implementation.
-
-If the project needs initial products, run the seed once from a controlled
-environment with the production `MONGO_URI`:
-
-```powershell
-cd C:\itcp318\backend
-$env:MONGO_URI="your-production-mongodb-uri"
-npm install
-npm run seed
-```
-
-After seeding, remove the temporary PowerShell variable:
-
-```powershell
-Remove-Item Env:\MONGO_URI
-```
-
-Only seed a new/empty database or after verifying the seeder behavior.
-
----
-
-## 7. Deployment checklist
-
-### Backend
-
-- [ ] Render service root is `backend`.
-- [ ] Build command is `npm install`.
-- [ ] Start command is `npm start`.
-- [ ] Health check is `/api/v1/health`.
-- [ ] `MONGO_URI` points to MongoDB Atlas.
-- [ ] Atlas permits the Render connection.
-- [ ] Firebase service account is uploaded as a Secret File.
-- [ ] `GOOGLE_APPLICATION_CREDENTIALS` points to `/etc/secrets/firebase-service-account.json`.
-- [ ] Cloudinary variables are set.
-- [ ] SMTP variables are set if email is required.
-- [ ] `CLIENT_URL` exactly matches the deployed frontend origin.
-
-### Frontend
-
-- [ ] Render service type is Static Site.
-- [ ] Root is `frontend`.
-- [ ] Build command is `npm install && npm run build`.
-- [ ] Publish directory is `dist`.
-- [ ] `VITE_API_URL` points to the deployed backend and ends in `/api/v1`.
-- [ ] All Firebase `VITE_*` values are set.
-- [ ] SPA rewrite `/* -> /index.html` is configured.
-- [ ] Firebase Authorized Domains contains the Render frontend hostname.
-- [ ] Browser requests do not point to localhost.
-
-### Final smoke test
-
-- [ ] Homepage loads.
-- [ ] Product list loads.
-- [ ] Product detail refresh works.
-- [ ] Login/register works.
-- [ ] Google login works if enabled.
-- [ ] Admin dashboard opens for an admin.
-- [ ] Product create/update/delete works.
-- [ ] Multiple image upload works.
-- [ ] Checkout creates an order.
-- [ ] Admin status update works.
-- [ ] Email/PDF works when SMTP is configured.
-
----
-
-## 8. Troubleshooting by symptom
-
-### `404` after refreshing a frontend route
-
-Add or verify the Static Site rewrite:
-
-```text
-/* -> /index.html
-```
-
-Then redeploy the frontend.
-
-### `Network Error` or API requests go to localhost
-
-Verify the frontend Static Site variable:
-
-```text
-VITE_API_URL=https://YOUR-BACKEND.onrender.com/api/v1
-```
-
-Because Vite embeds variables during build, save the variable and trigger a
-new frontend deploy. A browser refresh alone is not enough.
+## Kapag nag-error
 
 ### CORS error
 
-Set the backend variable to the frontend origin:
+Backend:
 
 ```text
-CLIENT_URL=https://YOUR-FRONTEND.onrender.com
+CLIENT_URL=https://YOUR-ACTUAL-FRONTEND.onrender.com
 ```
 
-Do not include `/api/v1` in `CLIENT_URL`. Do not add a trailing slash.
-Redeploy the backend after changing it.
+Frontend:
 
-### Firebase login says unauthorized domain
-
-Add only the hostname, without protocol, to Firebase Authorized Domains:
-
-```text
-YOUR-FRONTEND.onrender.com
+```env
+VITE_API_URL=https://YOUR-ACTUAL-BACKEND.onrender.com/api/v1
 ```
 
-### Backend exits during startup
+I-save ang backend variable at i-redeploy ang backend. Kapag nagbago ang
+`VITE_API_URL`, i-redeploy din ang frontend.
 
-Check the first error in Render logs. Usually the cause is one of:
+### Frontend gumagamit ng localhost
 
-- invalid MongoDB URI or Atlas network access
-- missing Firebase Secret File
-- incorrect `GOOGLE_APPLICATION_CREDENTIALS` path
-- malformed environment variable
+Palitan ang `VITE_API_URL`, i-push, at mag-deploy ulit. Hindi sapat ang browser
+refresh dahil ang Vite variables ay naka-embed sa build.
 
-### Images do not upload
+### Firebase unauthorized domain
 
-Check Cloudinary variables in the backend service and confirm the request is
-going to the deployed backend. Cloudinary secrets must not be added to the
-frontend.
+Idagdag ang hostname sa Firebase Authorized domains nang walang `https://`.
 
-### Email is not received
+### Backend hindi nag-start
 
-Check SMTP credentials, port, secure mode, verified sender requirements, and
-the backend logs. Email is a side effect of order creation/status update and
-requires an available SMTP provider.
+Tingnan ang Render Logs at i-check muna:
 
-### Render free service is slow on the first request
+1. `MONGO_URI` at MongoDB Atlas Network Access.
+2. Firebase Secret File filename.
+3. `GOOGLE_APPLICATION_CREDENTIALS`.
+4. Cloudinary values.
+5. SMTP values.
 
-Free services may sleep when idle. The first request can take longer while the
-service wakes up. Test the backend health endpoint first, then refresh the
-frontend.
-
----
-
-## 9. Safe redeployment procedure
-
-When code changes are pushed:
-
-1. Push the commit to the connected GitHub branch.
-2. Wait for the backend deploy to finish.
-3. Open the backend health endpoint.
-4. Wait for the frontend deploy to finish.
-5. Test the frontend in a private/incognito window.
-6. Check browser Network and Console tabs.
-7. Check Render logs if an API request fails.
-
-Never delete production environment variables to troubleshoot. Change one
-variable at a time, redeploy, and verify the health endpoint after each
-change.
+Huwag gumawa ng panibagong code change hangga't hindi nakikita ang unang
+startup error sa logs.
