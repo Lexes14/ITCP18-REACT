@@ -40,7 +40,46 @@ Admin routes additionally use `authorizeRoles("admin")`.
 
 ---
 
-# 1. Product CRUD data table
+# Requirement order and implementation status
+
+The sections below follow the functional-requirement order: MP1, MP2, MP3,
+Term Test Lab, Unit 1, Unit 2, Quizzes 1-4, and Term Test LEC. `Implemented`
+means an actual code path was found. `Partial` means the main path exists but
+has a documented limitation. `Not implemented` means no corresponding active
+code path was found.
+
+| Requirement area | Main code path | Status |
+|---|---|---|
+| MP1 Product CRUD table | `Admin/ProductsList.jsx` → product routes/controller/model | Implemented |
+| MP1 Multiple photo upload | `NewProduct.jsx`/`UpdateProduct.jsx` → Multer → Cloudinary | Implemented |
+| MP1 Bulk delete checkboxes | `ProductsList.jsx` → `bulkDeleteProducts` | Implemented |
+| MP2 Price/category/rating filters | `Home.jsx` → `apiFeatures.js` | Implemented |
+| MP2 Review filter | `ProductReviews.jsx` | Not implemented |
+| MP3 Customer review/rating | `ListOrders.jsx` → `createOrUpdateReview` | Implemented |
+| MP3 Own review/rating update | Same review endpoint with owner check | Partial; edit UI is limited |
+| MP3 Admin review delete | `ProductReviews.jsx` → `deleteReview` | Implemented with validation gap |
+| Term Test Lab transaction | Cart → checkout → `newOrder` | Partial; COD only |
+| Term Test Lab order status | `OrdersList.jsx` → `updateOrder` | Implemented |
+| Term Test Lab email/PDF | `notifyOrder` → SMTP and PDFKit | Implemented; requires SMTP |
+| Unit 1 profanity masking | `profanityFilter.js` | Implemented with custom filter |
+| Unit 1 Yup validation | `validation.js` and form components | Implemented |
+| Unit 2 CSS UI | App/admin/product/profile CSS | Implemented |
+| Unit 2 Bootstrap UI | No Bootstrap component usage | Not implemented |
+| Unit 2 MUI/similar UI | Recharts is used; controls are custom HTML/CSS | Partial |
+| Quiz 1 sales charts/date filter | Admin chart components → order aggregations | Partial |
+| Quiz 2 pagination/infinite scroll | `Home.jsx` → product API pagination | Implemented |
+| Quiz 3 Gmail/Google login | Firebase `GoogleAuthProvider` | Implemented |
+| Quiz 3 Facebook login | No `FacebookAuthProvider` path | Not implemented |
+| Quiz 4 Redux | `store.js`, actions, reducers | Implemented |
+| Term Test LEC completeness | Feature coverage in this document | Partial |
+| Term Test LEC execution/errors | Build and static checks; external services required | Cannot fully verify |
+| Term Test LEC contribution | UPS product-store implementation | Implemented |
+
+---
+
+# MP1 — Product CRUD, multiple photos, and bulk delete
+
+## MP1.1 Product CRUD data table
 
 ## What the feature does
 
@@ -153,7 +192,7 @@ fields described later.
 
 ---
 
-# 2. Multiple product photo upload
+## MP1.2 Multiple product photo upload
 
 ## Frontend path
 
@@ -184,7 +223,7 @@ deletion is also called when a product or individual image is removed.
 
 ---
 
-# 3. Bulk delete with checkboxes
+## MP1.3 Bulk delete with checkboxes
 
 ## Frontend flow
 
@@ -227,7 +266,7 @@ clears the selection.
 
 ---
 
-# 4. Homepage product filters
+# MP2 — Filter functions
 
 All homepage filters start in
 `frontend/src/Components/Home.jsx`. The selected state is included in
@@ -248,7 +287,7 @@ filter control
   -> product cards
 ```
 
-## Price filter
+## MP2.1 Price filter
 
 The maximum-price range input uses `maxPrice` from PHP 0 to PHP 160,000 in
 PHP 500 steps and sends `price[lte]`.
@@ -265,7 +304,7 @@ This filters the stored base `price`. The product card may display
 `salePrice || price`, so the filter does not independently calculate a
 sale-price threshold.
 
-## Category filter
+## MP2.2 Category filter
 
 `Home.jsx` defines the category buttons and sends the selected value as
 `category`.
@@ -280,7 +319,7 @@ category button
 
 The accepted category values are defined in the Product schema.
 
-## Ratings filter
+## MP2.3 Ratings filter
 
 The UI offers `Any rating`, `4+ stars`, and `4.5+ stars`.
 
@@ -295,7 +334,7 @@ setRating("4")
 `ratings` is the aggregate value calculated from the Product document's
 embedded reviews.
 
-## Review-record filter
+## MP2.4 Review-record filter
 
 There is currently no review filter implementation. The admin review screen
 loads reviews and supports deletion, but it does not provide review search,
@@ -304,7 +343,7 @@ different from the product **ratings** filter above.
 
 ---
 
-# 5. Reviews and ratings
+# MP3 — Review and rating functions
 
 ## Data structure
 
@@ -399,7 +438,7 @@ the current product-detail UI does not fully render public reviews and
 
 ---
 
-# 6. Completed transaction and order status
+# Term Test Lab — Transactions and order status
 
 ## Customer checkout flow
 
@@ -456,7 +495,7 @@ and product reference as a snapshot of the transaction.
 
 ---
 
-# 7. Customer email and PDF receipt
+## Term Test Lab.1 Customer email and PDF receipt
 
 Both new-order creation and admin status updates call `notifyOrder()` in
 `backend/controllers/order.js`.
@@ -482,7 +521,9 @@ skipped or logged.
 
 ---
 
-# 8. Bad-word masking
+# Unit 1 — Bad-word masking and form validation
+
+## Unit 1.1 Bad-word masking
 
 The project uses a custom filter, not the `bad-words` npm package.
 
@@ -500,7 +541,7 @@ the review retrieval controllers.
 
 ---
 
-# 9. Form validation
+## Unit 1.2 Form validation
 
 Shared schemas are in `frontend/src/Utils/validation.js`. The `validate`
 helper runs Yup with `abortEarly: false`, so multiple field errors can be
@@ -526,7 +567,7 @@ Hook Form are not used in the current implementation.
 
 ---
 
-# 10. User interface implementation
+# Unit 2 — User interface design
 
 The active UI uses React, native HTML controls, and custom CSS:
 
@@ -547,7 +588,7 @@ frontend manifest.
 
 ---
 
-# 11. Sales charts
+# Quiz 1 — Sales charts with date range
 
 The dashboard chart components call admin analytics endpoints:
 
@@ -566,7 +607,7 @@ do not expose the same date inputs in their current UI.
 
 ---
 
-# 12. Pagination and infinite scroll
+# Quiz 2 — Product pagination and infinite scroll
 
 ## Pagination
 
@@ -600,7 +641,7 @@ ignores cancellation errors.
 
 ---
 
-# 13. Firebase Google login
+# Quiz 3 — Firebase Google login
 
 ```text
 Login.jsx googleLogin()
@@ -620,7 +661,7 @@ there is no `FacebookAuthProvider` or Facebook login handler.
 
 ---
 
-# 14. Redux state management
+# Quiz 4 — Redux state management
 
 The store is configured in `frontend/src/store.js` with reducers and thunk.
 
@@ -637,7 +678,7 @@ subscribe with `useSelector` and dispatch with `useDispatch`.
 
 ---
 
-# 15. Service CRUD status
+# MP1 note — Product versus Service domain
 
 The requirement wording mentions Product/Service CRUD, but this repository
 contains only Product CRUD:
@@ -656,7 +697,107 @@ silently treated as implemented by the existing Product CRUD.
 
 ---
 
-# 16. Quick navigation index
+# Term Test LEC — Completeness, execution, and contribution
+
+## Functional requirements completeness
+
+The implemented end-to-end product-store flow is:
+
+```text
+Firebase login
+  -> product catalog and filters
+  -> product details
+  -> cart
+  -> shipping and confirmation
+  -> COD order
+  -> admin order status
+  -> customer email/PDF side effect
+  -> delivered-product review/rating
+```
+
+The main incomplete or limited areas are:
+
+- There is no separate Service model or Service CRUD.
+- Review-record filtering is not implemented.
+- Online payment is not implemented; checkout is COD.
+- Public product review rendering is incomplete.
+- The review form does not show a same-session edit button after submission.
+- Facebook login is not implemented.
+- Bootstrap components are not used.
+- MUI/Data Grid is listed in dependencies, but active UI controls use custom
+  HTML/CSS. Recharts is used for charts.
+- SMTP email delivery depends on environment configuration.
+
+## Program execution and error handling
+
+### Startup path
+
+```text
+backend/server.js
+  -> dotenv loads backend/config/.env
+  -> app.js configures Express and routes
+  -> connectDatabase()
+  -> app.listen(PORT)
+
+frontend/index.html
+  -> frontend/src/main.jsx
+  -> Redux Provider + BrowserRouter
+  -> frontend/src/App.jsx
+  -> route components
+```
+
+### Error path
+
+Frontend API errors are converted to toast messages through
+`frontend/src/Utils/helpers.jsx:errMsg`. Backend asynchronous controller errors
+are passed through `backend/utils/catchAsyncErrors.js` to
+`backend/middlewares/error.js`, which creates the HTTP error response.
+
+The project has verified build/static checks, but live MongoDB, Firebase Admin,
+Cloudinary, and SMTP behavior depends on deployment credentials and cannot be
+proven by source inspection alone.
+
+### What to check before a demo
+
+```powershell
+cd frontend
+npm run build
+
+cd ..\backend
+node --check server.js
+```
+
+Then verify:
+
+1. `GET /api/v1/health` responds successfully.
+2. The frontend `VITE_API_URL` points to the deployed API.
+3. Backend `CLIENT_URL` points to the deployed frontend.
+4. MongoDB Atlas permits the deployed backend.
+5. Firebase Authorized Domains contains the frontend host.
+6. Cloudinary upload credentials work for product images.
+7. SMTP credentials work if email/PDF is being demonstrated.
+
+## Project contribution
+
+The project contribution is an integrated UPS Battery Store rather than an
+isolated CRUD screen. It includes:
+
+- customer product catalog with server-side filtering and pagination
+- admin product management and Cloudinary image storage
+- Firebase email/password and Google authentication
+- Redux cart, shipping, product, order, and user state
+- COD checkout and stock updates
+- admin order processing and analytics
+- customer reviews and aggregate product ratings
+- profanity masking, Yup validation, email notification, and PDF receipts
+- responsive custom CSS interface and loading states
+
+The source-of-truth navigation for each contribution is the feature table at
+the beginning of this document and the Quick navigation index below.
+
+---
+
+# Quick navigation index
 
 | Feature | Start file | Backend anchor |
 |---|---|---|
